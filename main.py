@@ -1,66 +1,83 @@
-import asyncio
+# main.py
+
 import logging
+import asyncio
 import nest_asyncio
-from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, ContextTypes, filters
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import (
+    Application, CommandHandler, MessageHandler, ContextTypes,
+    filters
+)
 
-# 🔐 Токен бота и ID админа
-BOT_TOKEN = "7990044460:AAFMYiXyWzeGDZoiEK1iIQi6cDA61hFcEPc"
+nest_asyncio.apply()
+
+# ADMIN ID
 ADMIN_ID = 2077750894
+# TOKEN
+BOT_TOKEN = "7990044460:AAFMYiXyWzeGDZoiEK1iIQi6cDA61hFcEPc"
 
-# 📦 Для хранения сообщений от пользователей
+# Foydalanuvchilar xabarlari uchun vaqtincha saqlovchi
 user_messages = {}
 
-# ⚙️ Логирование
-logging.basicConfig(level=logging.INFO)
+# Logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 
-# 📨 Обработка входящих сообщений от пользователей
+# Start komandasi
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    keyboard = [["✉️ Yuborish"]]
+    reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text("✋ Anonim xabar yo‘llash uchun tugmani bosing.", reply_markup=reply_markup)
+
+# Foydalanuvchidan anonim xabar qabul qilish
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    username = user.username or "без_ника"
-    chat_id = update.effective_chat.id
     text = update.message.text
 
-    # Сохраняем последнее сообщение по username
-    user_messages[username] = chat_id
+    if text == "✉️ Yuborish":
+        await update.message.reply_text("Xabaringizni yozing. U anonim tarzda yuboriladi.")
+        return
 
-    # Отправляем админу сообщение с кнопкой для ответа
-    if chat_id != ADMIN_ID:
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"📩 Сообщение от @{username}:\n{text}"
-        )
-        await context.bot.send_sticker(chat_id=ADMIN_ID, sticker="CAACAgIAAxkBAAEKc1NlriF_SXQd1oK8CmJPr6mVAVMxLQACuBwAAh4vSEma_e0IKPQ_EzQE")
+    # Saqlab qo‘yamiz, shunda admin javob bera oladi
+    user_messages[user.id] = user.username or f"id:{user.id}"
 
-# 🔁 Ответ админа пользователю через команду
-async def reply_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    # Adminga yuboramiz
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=f"📩 Yangi anonim xabar:\n\n{text}\n\n👤 Yuboruvchi: @{user.username or 'no_username'} (id: {user.id})"
+    )
+
+    await update.message.reply_text("✅ Xabaringiz anonim tarzda yuborildi.")
+
+# Admindan foydalanuvchiga javob
+async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         return
 
-    if len(context.args) < 2:
-        await update.message.reply_text("Использование: /ответ @username сообщение")
+    if not context.args or len(context.args) < 2:
+        await update.message.reply_text("Foydalanuvchi ID va xabarni yozing:\nMasalan: /reply 123456789 Salom!")
         return
 
-    username = context.args[0].lstrip("@")
-    message_text = " ".join(context.args[1:])
+    user_id = int(context.args[0])
+    reply_text = " ".join(context.args[1:])
 
-    if username in user_messages:
-        user_id = user_messages[username]
-        await context.bot.send_message(chat_id=user_id, text=message_text)
-        await update.message.reply_text("✅ Ответ отправлен.")
-    else:
-        await update.message.reply_text("❌ Пользователь не найден или ещё не писал.")
+    try:
+        await context.bot.send_message(chat_id=user_id, text=f"💬 Admindan javob:\n\n{reply_text}")
+        await update.message.reply_text("✅ Javob yuborildi.")
+    except Exception as e:
+        await update.message.reply_text(f"Xatolik: {e}")
 
-# 🚀 Основной запуск бота
+# Botni ishga tushurish
 async def main():
     app = Application.builder().token(BOT_TOKEN).build()
 
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("reply", reply_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(CommandHandler("ответ", reply_command))
 
-    print("🤖 Бот запущен. Ожидаем сообщения...")
+    print("🤖 Bot ishga tushdi...")
     await app.run_polling()
 
 if __name__ == "__main__":
-    nest_asyncio.apply()
     asyncio.run(main())
